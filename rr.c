@@ -21,6 +21,8 @@ struct process
   TAILQ_ENTRY(process) pointers;
 
   /* Additional fields here */
+  u32 remaining_time; // initialized to burst_time
+  bool added_to_list; // initialized to false
   /* End of "Additional fields here" */
 };
 
@@ -135,6 +137,8 @@ void init_processes(const char *path,
     (*process_data)[i].pid = next_int(&data, data_end);
     (*process_data)[i].arrival_time = next_int(&data, data_end);
     (*process_data)[i].burst_time = next_int(&data, data_end);
+    (*process_data)[i].remaining_time = (*process_data)[i].burst_time;
+    (*process_data)[i].added_to_list = false;
   }
 
   munmap((void *)data, size);
@@ -160,7 +164,58 @@ int main(int argc, char *argv[])
   u32 total_response_time = 0;
 
   /* Your code here */
+  u32 t = 0;
+  u32 completed_processes = 0;
   
+  while (completed_processes < size) {
+    if (!TAILQ_EMPTY(&list)) {
+      struct process* curr = TAILQ_FIRST(&list);
+      TAILQ_REMOVE(&list, curr, pointers);
+
+      // First run
+      if (curr->remaining_time == curr->burst_time) {
+        total_response_time += t - curr->arrival_time;
+      }
+      
+      // Completing
+      if (curr->remaining_time < quantum_length) {
+        t += curr->remaining_time;
+        curr->remaining_time = 0;
+        completed_processes++;
+        total_waiting_time += t - curr->arrival_time - curr->burst_time;
+      } else { // In progress
+        t += quantum_length;
+        curr->remaining_time -= quantum_length;
+        if (curr->remaining_time == 0) {
+          completed_processes++;
+          total_waiting_time += t - curr->arrival_time - curr->burst_time;
+        }
+      }
+      for (u32 i = 0; i < size; i++) {
+        if (data[i].arrival_time <= t && data[i].added_to_list == false) {
+
+          TAILQ_INSERT_TAIL(&list, &data[i], pointers); // added proc to list
+          data[i].added_to_list = true;
+        }
+      }
+
+      // If incomplete, add to the end of the list
+      if (curr->remaining_time > 0) {
+        TAILQ_INSERT_TAIL(&list, curr, pointers); // added proc to list
+      }
+      
+    } else { // queue is empty but still processes to complete
+      // Find the next process that hasn't been added yet
+      for (u32 i = 0; i < size; i++) {
+        if (data[i].remaining_time > 0 && data[i].added_to_list == false) {
+          TAILQ_INSERT_TAIL(&list, &data[i], pointers);
+          data[i].added_to_list = true;
+          t = data[i].arrival_time; // move time forward to arrival time of next process
+          break;
+        }
+      }
+    }
+  }
   /* End of "Your code here" */
 
   printf("Average waiting time: %.2f\n", (float)total_waiting_time / (float)size);

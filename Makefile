@@ -8,7 +8,11 @@ endif
 .PHONY: all
 all: rr
 
+rr.o: rr.c
+	gcc $(CFLAGS) -c $< -o $@
+
 rr: rr.o
+	gcc $(CFLAGS) $(LDFLAGS) $< -o $@
 
 .PHONY: clean
 clean:
